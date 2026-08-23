@@ -15,7 +15,7 @@ from ..checkpoint import load_weights
 from ..generate import generate_naive, generate_speculative
 from ..model import GPTConfig
 from ..tokenizer import BPETokenizer
-from ..viz import plot_acceptance_over_blocks, plot_bars
+from ..viz import plot_acceptance_over_blocks, plot_decoding_comparison
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 CHECKPOINT_DIR = ROOT / "checkpoints"
@@ -53,23 +53,29 @@ def main() -> None:
     )
     naive_tps = N_TOKENS / naive_time
 
+    # Per-block acceptance rate = accepted draft proposals / total draft
+    # proposals in that block. "corrected" is a rejected proposal, so it
+    # counts toward the block's size; "bonus" is not a proposal at all (it's
+    # an extra token sampled straight from the main model after a fully
+    # accepted block), so it must NOT inflate the denominator, or the
+    # per-block rate understates the true accepted/proposed ratio reported
+    # in stats (see the "same model" test in test_generate_integration.py
+    # for why every accepted token here really was a draft proposal).
     block_sizes: list[int] = []
     block_accepted: list[int] = []
 
     def on_token(_token_id: int, kind: str) -> None:
-        if kind == "accepted":
-            if not block_sizes:
-                block_sizes.append(0)
-                block_accepted.append(0)
-            block_sizes[-1] += 1
-            block_accepted[-1] += 1
-        else:  # "corrected" or "bonus" ends a block
-            if not block_sizes:
-                block_sizes.append(0)
-                block_accepted.append(0)
-            block_sizes[-1] += 1
+        if not block_sizes:
             block_sizes.append(0)
             block_accepted.append(0)
+        if kind == "accepted":
+            block_sizes[-1] += 1
+            block_accepted[-1] += 1
+            return
+        if kind == "corrected":
+            block_sizes[-1] += 1
+        block_sizes.append(0)
+        block_accepted.append(0)
 
     stats_holder = {}
 
@@ -102,31 +108,17 @@ def main() -> None:
     )
 
     ASSETS_DIR.mkdir(exist_ok=True)
-    plot_bars(
-        ["naive\n(main model only)", "speculative\n(draft + main)"],
-        [naive_tps, spec_tps],
-        ASSETS_DIR / "throughput.png",
-        title=f"Decoding throughput ({N_TOKENS} tokens, best of {N_TRIALS} runs)",
-        ylabel="tokens / second",
-    )
-    plot_bars(
-        ["naive\n(main model only)", "speculative\n(draft + main)"],
-        [float(N_TOKENS), float(stats.main_forward_calls)],
-        ASSETS_DIR / "main_model_calls.png",
-        title=(
-            f"Main-model forward passes for {N_TOKENS} generated tokens\n"
-            "(the expensive calls on real hardware; fewer is cheaper)"
-        ),
-        ylabel="main-model forward passes",
-        fmt="{:.0f}",
+    plot_decoding_comparison(
+        naive_tps, spec_tps, N_TOKENS, stats.main_forward_calls,
+        ASSETS_DIR / "decoding_comparison.png",
+        n_tokens=N_TOKENS,
     )
     plot_acceptance_over_blocks(
         acceptance_rates,
         ASSETS_DIR / "acceptance_rate.png",
         title="Draft-token acceptance rate per speculative block",
     )
-    print(f"wrote {ASSETS_DIR / 'throughput.png'}")
-    print(f"wrote {ASSETS_DIR / 'main_model_calls.png'}")
+    print(f"wrote {ASSETS_DIR / 'decoding_comparison.png'}")
     print(f"wrote {ASSETS_DIR / 'acceptance_rate.png'}")
 
 

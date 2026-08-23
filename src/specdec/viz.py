@@ -1,60 +1,127 @@
-"""Plots and a colorized SVG render of a speculative-decoding transcript."""
+"""Plots and a colorized SVG render of a speculative-decoding transcript.
+
+Shared visual language across every chart here: slate gray for the naive
+baseline, emerald green for the speculative-decoding numbers (matching the
+"accepted" color in the live-generation transcript), amber only for the
+handful of things worth calling out (an annotation, a mean line). Bars get
+a value label directly above them so the numbers are legible even without
+reading the axis.
+"""
 
 from __future__ import annotations
 
 import html
 from pathlib import Path
 
+_NAIVE = "#64748b"
+_SPEC = "#059669"
+_SPEC_DARK = "#065f46"
+_ACCENT = "#b45309"
+_GRID = "#e5e7eb"
+_TEXT = "#1f2937"
+_MUTED = "#6b7280"
 
-def plot_bars(labels: list[str], values: list[float], path, *, title: str, ylabel: str, fmt: str = "{:.1f}") -> None:
-    import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(6.5, 4.2))
-    colors = ["#6c7a89", "#2e7d32"]
-    bars = ax.bar(labels, values, color=colors[: len(labels)], width=0.5)
-    for bar, val in zip(bars, values, strict=True):
-        ax.text(bar.get_x() + bar.get_width() / 2, val + max(values) * 0.02, fmt.format(val),
-                 ha="center", va="bottom", fontsize=11, fontweight="bold")
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    ax.set_ylim(0, max(values) * 1.2)
+def _style_axis(ax) -> None:
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color(_MUTED)
+    ax.spines["bottom"].set_color(_MUTED)
+    ax.tick_params(colors=_MUTED)
+    ax.title.set_color(_TEXT)
+    ax.xaxis.label.set_color(_TEXT)
+    ax.yaxis.label.set_color(_TEXT)
+
+
+def plot_decoding_comparison(
+    naive_tps: float,
+    spec_tps: float,
+    naive_calls: int,
+    spec_calls: int,
+    path,
+    *,
+    n_tokens: int,
+) -> None:
+    """One figure, two panels: tokens/second and main-model forward passes,
+    naive vs. speculative, side by side so the two numbers that matter are
+    visible in a single glance rather than three separate small charts."""
+    import matplotlib.pyplot as plt
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.6))
+    fig.patch.set_facecolor("white")
+    labels = ["naive", "speculative"]
+    colors = [_NAIVE, _SPEC]
+
+    for ax, values, title, ylabel, fmt in (
+        (ax1, [naive_tps, spec_tps], f"Throughput ({n_tokens} tokens)", "tokens / second", "{:.0f}"),
+        (ax2, [float(naive_calls), float(spec_calls)], "Main-model forward passes", "forward passes", "{:.0f}"),
+    ):
+        bars = ax.bar(labels, values, color=colors, width=0.55, zorder=3)
+        for bar, val in zip(bars, values, strict=True):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2, val + max(values) * 0.03, fmt.format(val),
+                ha="center", va="bottom", fontsize=13, fontweight="bold", color=_TEXT,
+            )
+        ax.set_ylabel(ylabel, fontsize=10.5)
+        ax.set_title(title, fontsize=12.5, fontweight="bold", pad=12)
+        ax.set_ylim(0, max(values) * 1.22)
+        ax.grid(axis="y", color=_GRID, linewidth=1, zorder=0)
+        ax.set_axisbelow(True)
+        _style_axis(ax)
+        ax.tick_params(axis="x", labelsize=11)
+
+    fig.suptitle(
+        "Speculative decoding needs fewer main-model calls, but pays for it in dispatch overhead at this scale",
+        fontsize=10.5, color=_MUTED, y=1.02,
+    )
     fig.tight_layout()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=160, bbox_inches="tight")
+    fig.savefig(path, dpi=170, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
 def plot_acceptance_over_blocks(acceptance_rates: list[float], path, *, title: str, window: int = 15) -> None:
     """Each speculative block only accepts a handful of tokens, so the raw
-    per-block rate is a noisy 0/0.5/0.67/... step sequence (see the faint
-    line); the bold line is a trailing rolling average over `window` blocks,
-    which is what actually shows the trend."""
+    per-block rate is a noisy 0/0.5/0.67/... step sequence (the faint fill);
+    the bold line is a trailing rolling average over `window` blocks, which
+    is what actually shows the trend, with the overall mean called out."""
     import matplotlib.pyplot as plt
     import numpy as np
 
-    fig, ax = plt.subplots(figsize=(6.5, 4.2))
-    x = range(1, len(acceptance_rates) + 1)
-    ax.plot(x, acceptance_rates, color="#2e7d32", linewidth=1, alpha=0.25, label="per block")
+    fig, ax = plt.subplots(figsize=(9, 4.6))
+    fig.patch.set_facecolor("white")
+    x = list(range(1, len(acceptance_rates) + 1))
+    ax.fill_between(x, acceptance_rates, color=_SPEC, alpha=0.12, zorder=1)
+    ax.plot(x, acceptance_rates, color=_SPEC, linewidth=1, alpha=0.35, zorder=2, label="per block")
 
     if len(acceptance_rates) >= window:
         kernel = np.ones(window) / window
         smoothed = np.convolve(acceptance_rates, kernel, mode="valid")
-        smoothed_x = range(window, len(acceptance_rates) + 1)
-        ax.plot(smoothed_x, smoothed, color="#1b5e20", linewidth=2.5, label=f"rolling mean (window={window})")
+        smoothed_x = list(range(window, len(acceptance_rates) + 1))
+        ax.plot(smoothed_x, smoothed, color=_SPEC_DARK, linewidth=2.75, zorder=3,
+                label=f"rolling mean (window={window})")
 
-    ax.set_xlabel("speculative block")
-    ax.set_ylabel("fraction of draft tokens accepted")
-    ax.set_ylim(0, 1.05)
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper right", fontsize=9)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    mean_rate = float(np.mean(acceptance_rates))
+    ax.axhline(mean_rate, color=_ACCENT, linewidth=1.5, linestyle="--", zorder=2)
+    ax.text(
+        x[-1], mean_rate, f" overall mean {mean_rate:.0%} ", color=_ACCENT, fontsize=10,
+        fontweight="bold", va="center", ha="left",
+        bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "edgecolor": "none"},
+        zorder=4,
+    )
+
+    ax.set_xlabel("speculative block", fontsize=10.5)
+    ax.set_ylabel("fraction of draft tokens accepted", fontsize=10.5)
+    ax.set_ylim(0, 1.08)
+    ax.set_xlim(0, x[-1] * 1.12)
+    ax.set_title(title, fontsize=12.5, fontweight="bold", pad=12)
+    ax.grid(axis="y", color=_GRID, linewidth=1, zorder=0)
+    ax.set_axisbelow(True)
+    ax.legend(loc="upper left", fontsize=9.5, frameon=False)
+    _style_axis(ax)
     fig.tight_layout()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=160, bbox_inches="tight")
+    fig.savefig(path, dpi=170, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="796" height="192" viewBox="0 0 796 192" font-family="Consolas, Menlo, monospace">
 <rect width="796" height="192" fill="#12141a"/>
-<text x="20" y="24" font-size="14" fill="#9aa0ab">Speculative decoding, live — 25% of draft tokens accepted</text>
+<text x="20" y="24" font-size="14" fill="#9aa0ab">Speculative decoding, live: 25% of draft tokens accepted</text>
 <rect x="20" y="34" width="142" height="18" rx="4" fill="#d7f2dc"/>
 <text x="28" y="47" font-size="12" fill="#1b5e20">accepted from draft</text>
 <rect x="173.60000000000002" y="34" width="270" height="18" rx="4" fill="#fde0dc"/>

@@ -6,18 +6,27 @@
 ![Tests](https://img.shields.io/badge/tests-50%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Most "build an LLM from scratch" projects stop at the forward pass. This one goes further into the parts that make real LLM *serving* interesting: a byte-level BPE tokenizer trained without tiktoken or HuggingFace, a KV-cache implemented and verified against a from-scratch NumPy autodiff engine, and full **speculative decoding**. A small draft model proposes tokens, a bigger model verifies a whole block in one batched pass, and a rejection-sampling rule keeps the output provably identical to sampling from the big model alone. The correctness of that rule is checked directly, with hand-picked probability distributions, not just eyeballed from generated text.
+Most "build an LLM from scratch" projects stop at the forward pass. This one goes further into the parts that make real LLM *serving* interesting: a byte-level BPE tokenizer trained without tiktoken or HuggingFace, a KV-cache implemented and verified against a from-scratch NumPy autodiff engine, and full **speculative decoding**. A small draft model proposes tokens, a bigger model verifies a whole block in one batched pass, and a rejection-sampling rule keeps the output provably identical to sampling from the big model alone.
 
-## At a glance
+## Results, measured
 
-| | |
-|---|---|
-| Tokenizer compression | 17,217 raw bytes -> 7,073 tokens (2.4x) |
-| Draft acceptance rate | 52.9% (72 / 136 tokens, measured) |
-| Main-model calls saved | 140 -> 137 for 140 generated tokens |
-| Speculative-decoding correctness | proven on hand-picked distributions, 40,000+ trials |
-| KV-cache correctness | checked against a from-scratch, no-cache ground truth |
-| Tests | 50 passing, `ruff` clean |
+![Naive vs speculative decoding: throughput and main-model forward passes](assets/decoding_comparison.png)
+
+Speculative decoding needs fewer main-model forward passes for the same output (fewer expensive calls), but does not yet win on the wall clock at this toy model scale. Both numbers are real, not cherry-picked; see [why the wall clock doesn't win yet](#honest-numbers-not-flattering-ones) below.
+
+![Draft-token acceptance rate per speculative block, with rolling mean](assets/acceptance_rate.png)
+
+Roughly half of proposed draft tokens get fast-forwarded without an individual main-model call, up from single digits before a real bug fix and a training-recipe change described below.
+
+![Live speculative decoding transcript, color-coded by provenance](assets/live_generation.svg)
+
+Every token in that transcript is colored by how it was actually produced in one real run: green fast-forwarded from the draft model, red corrected by the main model after a rejection, blue a free bonus token. Reproduce it yourself:
+
+```bash
+python -m specdec.demos.live_generate
+# or, after pip install:
+specdec generate --prompt "The lighthouse at Cold Point"
+```
 
 ## What's actually novel here, and what isn't
 
@@ -38,31 +47,11 @@ A second real bug turned up along the way and is worth naming: the original code
 
 ## Honest numbers, not flattering ones
 
-![Draft acceptance rate per block](assets/acceptance_rate.png)
+52.9% acceptance means roughly half of proposed tokens get fast-forwarded without an individual main-model call. On real, GPU-served, FLOP-bound hardware, that is the number that predicts wall-clock speedup. Measured here it does need fewer main-model forward passes for the same output: 137 vs. 140 for 140 tokens. That is modest, because at 52.9% acceptance most blocks are only 1 to 2 tokens before a rejection, but it is real and in the right direction.
 
-52.9% acceptance means roughly half of proposed tokens get fast-forwarded without an individual main-model call. On real, GPU-served, FLOP-bound hardware, that is the number that predicts wall-clock speedup. Measured here:
+What it does *not* do at this scale is win on the wall clock. Naive decoding is faster in raw tokens per second. The reason is structural, not a bug: these models are small enough (tens of thousands of parameters) that a single `forward_step` call's Python-and-NumPy dispatch overhead is comparable to, or larger than, its actual FLOPs. Speculative decoding trades "fewer expensive calls" for "more total calls" (draft proposals plus verify plus occasional resyncs), which is a good trade when each call is FLOP-bound and expensive (real serving, GPUs, billion-parameter models) and a bad one when each call's cost is mostly fixed overhead. Reporting a fabricated wall-clock win here would be easy and wrong; the honest result is a real reduction (about 24% at other lookahead settings, see `demos/benchmark.py`) in main-model calls that does not yet show up in wall-clock time at this toy scale.
 
-![Main-model forward passes](assets/main_model_calls.png)
-
-Speculative decoding does need fewer main-model forward passes for the same output: 137 vs. 140 for 140 tokens. That is modest, because at 52.9% acceptance most blocks are only 1 to 2 tokens before a rejection, but it is real and in the right direction. What it does *not* do at this scale is win on the wall clock:
-
-![Decoding throughput](assets/throughput.png)
-
-Naive decoding is faster in raw tokens per second. The reason is structural, not a bug: these models are small enough (tens of thousands of parameters) that a single `forward_step` call's Python-and-NumPy dispatch overhead is comparable to, or larger than, its actual FLOPs. Speculative decoding trades "fewer expensive calls" for "more total calls" (draft proposals plus verify plus occasional resyncs), which is a good trade when each call is FLOP-bound and expensive (real serving, GPUs, billion-parameter models) and a bad one when each call's cost is mostly fixed overhead. Reporting a fabricated wall-clock win here would be easy and wrong; the honest result is a real reduction (about 24% at other lookahead settings, see `demos/benchmark.py`) in main-model calls that does not yet show up in wall-clock time at this toy scale.
-
-## Watch it decode
-
-```bash
-python -m specdec.demos.live_generate
-# or, after pip install:
-specdec generate --prompt "The lighthouse at Cold Point"
-```
-
-Every output token is colored by how it was actually produced in that one real run:
-
-![Live speculative decoding transcript](assets/live_generation.svg)
-
-Green is fast-forwarded from the draft model, unmodified. Red is a draft proposal that got rejected and replaced by a corrected sample from the main model. Blue is a bonus token: every draft token in that block was accepted, so one extra token came free from the main model. The text itself is not fluent. The models here are deliberately tiny (a few hundred thousand parameters total) so the whole pipeline trains in minutes on a CPU; the point of this project is the inference engineering around the model, not competing on generation quality.
+The text in the live-generation transcript above is also not fluent. The models here are deliberately tiny (a few hundred thousand parameters total) so the whole pipeline trains in minutes on a CPU; the point of this project is the inference engineering around the model, not competing on generation quality.
 
 ## Install
 
@@ -97,7 +86,7 @@ print(tok.decode(ids), stats.accepted / stats.proposed)
 
 ```bash
 python -m specdec.demos.train        # trains tokenizer + main model + distilled draft model (~10 min on CPU)
-python -m specdec.demos.benchmark    # produces the three charts above
+python -m specdec.demos.benchmark    # produces the comparison and acceptance-rate charts above
 python -m specdec.demos.live_generate # produces the colorized transcript above
 ```
 
