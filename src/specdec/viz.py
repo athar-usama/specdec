@@ -20,17 +20,70 @@ _ACCENT = "#b45309"
 _GRID = "#e5e7eb"
 _TEXT = "#1f2937"
 _MUTED = "#6b7280"
+_BAND = "#f8fafc"
+_SHADOW = "#0f172a"
 
 
 def _style_axis(ax) -> None:
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(_MUTED)
+    ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_color(_MUTED)
-    ax.tick_params(colors=_MUTED)
+    ax.tick_params(colors=_MUTED, left=False)
     ax.title.set_color(_TEXT)
     ax.xaxis.label.set_color(_TEXT)
     ax.yaxis.label.set_color(_TEXT)
+
+
+def _lighten(hex_color: str, amount: float) -> tuple:
+    from matplotlib.colors import to_rgb
+
+    r, g, b = to_rgb(hex_color)
+    return (r + (1 - r) * amount, g + (1 - g) * amount, b + (1 - b) * amount)
+
+
+def _gradient_bar(ax, x_center: float, height: float, width: float, color: str, *, zorder: int = 3) -> None:
+    """A bar with a rounded top, a soft vertical gradient, and a faint drop
+    shadow, instead of a flat-filled rectangle. The rounded bottom corners a
+    plain FancyBboxPatch would draw are pushed below ``y=0`` and cropped away
+    by the axes' own clip box, so only the top stays visibly rounded."""
+    import numpy as np
+    from matplotlib.colors import LinearSegmentedColormap
+    from matplotlib.patches import FancyBboxPatch
+
+    if height <= 0:
+        return
+    radius = min(width, height) * 0.22
+
+    shadow = FancyBboxPatch(
+        (x_center - width / 2 + width * 0.05, -radius), width, height + radius,
+        boxstyle=f"round,pad=0,rounding_size={radius}",
+        linewidth=0, facecolor=_SHADOW, alpha=0.10, zorder=zorder - 1, transform=ax.transData,
+    )
+    ax.add_patch(shadow)
+
+    outline = FancyBboxPatch(
+        (x_center - width / 2, -radius), width, height + radius,
+        boxstyle=f"round,pad=0,rounding_size={radius}",
+        linewidth=0, facecolor="none", zorder=zorder, transform=ax.transData,
+    )
+    ax.add_patch(outline)
+
+    cmap = LinearSegmentedColormap.from_list("bar", [_lighten(color, 0.55), color])
+    gradient = np.linspace(0, 1, 256).reshape(-1, 1)
+    im = ax.imshow(
+        gradient, extent=(x_center - width / 2, x_center + width / 2, -radius, height),
+        origin="lower", aspect="auto", cmap=cmap, zorder=zorder, transform=ax.transData,
+    )
+    im.set_clip_path(outline)
+
+
+def _value_chip(ax, x_center: float, y: float, text: str, *, color: str = _TEXT) -> None:
+    ax.text(
+        x_center, y, text, ha="center", va="bottom", fontsize=12.5, color=color, fontweight="bold",
+        bbox={"boxstyle": "round,pad=0.32", "facecolor": "white", "edgecolor": _GRID, "linewidth": 1},
+        zorder=6,
+    )
 
 
 def plot_decoding_comparison(
@@ -47,28 +100,29 @@ def plot_decoding_comparison(
     visible in a single glance rather than three separate small charts."""
     import matplotlib.pyplot as plt
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 5))
     fig.patch.set_facecolor("white")
     labels = ["naive", "speculative"]
     colors = [_NAIVE, _SPEC]
+    bar_width = 0.5
 
     for ax, values, title, ylabel, fmt in (
         (ax1, [naive_tps, spec_tps], f"Throughput ({n_tokens} tokens)", "tokens / second", "{:.0f}"),
         (ax2, [float(naive_calls), float(spec_calls)], "Main-model forward passes", "forward passes", "{:.0f}"),
     ):
-        bars = ax.bar(labels, values, color=colors, width=0.55, zorder=3)
-        for bar, val in zip(bars, values, strict=True):
-            ax.text(
-                bar.get_x() + bar.get_width() / 2, val + max(values) * 0.03, fmt.format(val),
-                ha="center", va="bottom", fontsize=13, fontweight="bold", color=_TEXT,
-            )
+        ax.set_facecolor(_BAND)
+        for i, (val, color) in enumerate(zip(values, colors, strict=True)):
+            _gradient_bar(ax, i, val, bar_width, color)
+            _value_chip(ax, i, val, fmt.format(val), color=_SPEC_DARK if color == _SPEC else _TEXT)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, fontsize=11)
+        ax.set_xlim(-0.6, len(labels) - 0.4)
         ax.set_ylabel(ylabel, fontsize=10.5)
-        ax.set_title(title, fontsize=12.5, fontweight="bold", pad=12)
-        ax.set_ylim(0, max(values) * 1.22)
-        ax.grid(axis="y", color=_GRID, linewidth=1, zorder=0)
+        ax.set_title(title, fontsize=13, fontweight="bold", loc="left", pad=14)
+        ax.set_ylim(0, max(values) * 1.32)
+        ax.grid(axis="y", color="white", linewidth=1.4, zorder=0)
         ax.set_axisbelow(True)
         _style_axis(ax)
-        ax.tick_params(axis="x", labelsize=11)
 
     fig.suptitle(
         "Speculative decoding needs fewer main-model calls, but pays for it in dispatch overhead at this scale",
