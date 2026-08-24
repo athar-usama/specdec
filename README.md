@@ -1,10 +1,14 @@
 <h1 align="center">specdec</h1>
 
-**A from-scratch BPE tokenizer and speculative-decoding transformer inference engine, in pure Python and NumPy.**
+<p align="center">
+  <strong>A from-scratch BPE tokenizer and speculative-decoding transformer inference engine, in pure Python and NumPy.</strong>
+</p>
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-50%20passing-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python">
+  <img src="https://img.shields.io/badge/tests-50%20passing-brightgreen" alt="Tests">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+</p>
 
 Most "build an LLM from scratch" projects stop at the forward pass. This one goes further into the parts that make real LLM *serving* interesting: a byte-level BPE tokenizer trained without tiktoken or HuggingFace, a KV-cache implemented and verified against a from-scratch NumPy autodiff engine, and full **speculative decoding**. A small draft model proposes tokens, a bigger model verifies a whole block in one batched pass, and a rejection-sampling rule keeps the output provably identical to sampling from the big model alone.
 
