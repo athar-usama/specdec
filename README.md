@@ -1,4 +1,4 @@
-# specdec
+<h1 align="center">specdec</h1>
 
 **A from-scratch BPE tokenizer and speculative-decoding transformer inference engine, in pure Python and NumPy.**
 
@@ -10,15 +10,21 @@ Most "build an LLM from scratch" projects stop at the forward pass. This one goe
 
 ## The numbers this project produced
 
-![Naive vs speculative decoding: throughput and main-model forward passes](assets/decoding_comparison.png)
+<p align="center">
+  <img src="assets/decoding_comparison.png" alt="Naive vs speculative decoding: throughput and main-model forward passes">
+</p>
 
 Speculative decoding needs fewer main-model forward passes for the same output (fewer expensive calls), but does not yet win on the wall clock at this toy model scale. Both numbers are real, not cherry-picked; see [why the wall clock doesn't win yet](#the-wall-clock-has-the-final-word) below.
 
-![Draft-token acceptance rate per speculative block, with rolling mean](assets/acceptance_rate.png)
+<p align="center">
+  <img src="assets/acceptance_rate.png" alt="Draft-token acceptance rate per speculative block, with rolling mean">
+</p>
 
 Roughly half of proposed draft tokens get fast-forwarded without an individual main-model call, up from single digits before a real bug fix and a training-recipe change described below.
 
-![Live speculative decoding transcript, color-coded by provenance](assets/live_generation.svg)
+<p align="center">
+  <img src="assets/live_generation.svg" alt="Live speculative decoding transcript, color-coded by provenance">
+</p>
 
 Every token in that transcript is colored by how it was actually produced in one real run: green fast-forwarded from the draft model, red corrected by the main model after a rejection, blue a free bonus token. Reproduce it yourself:
 
@@ -34,7 +40,9 @@ Being upfront about this: implementing a transformer forward pass from scratch i
 
 - **A NumPy tensor-autodiff engine built specifically so training and KV-cached inference share the same math.** `functional.py`'s `softmax`/`layer_norm`/`gelu` run unmodified on a `Tensor` (building a graph, for training) or a plain `np.ndarray` (no graph, for inference), the same generic-dispatch trick project 1 (`hypergrad`) used for a different composition problem.
 
-![Both training and KV-cached inference route through the same functional.py ops, dispatched generically on Tensor vs. np.ndarray](assets/dispatch_diagram.svg)
+<p align="center">
+  <img src="assets/dispatch_diagram.svg" alt="Both training and KV-cached inference route through the same functional.py ops, dispatched generically on Tensor vs. np.ndarray">
+</p>
 
 - **Speculative decoding with the acceptance rule proven correct in isolation.** `speculative_accept_or_resample` is tested against hand-picked draft/target distributions over tens of thousands of trials and checked to reproduce the target distribution within sampling error, independent of whether the trained model is any good.
 - **A draft model built by distillation from the trained main model**, not trained independently. See below for why that turned out to matter far more than expected.
@@ -42,7 +50,9 @@ Being upfront about this: implementing a transformer forward pass from scratch i
 
 ## Fixing a draft model that agreed with nothing
 
-![Draft-token acceptance rate before (independently-trained draft) and after (distilled draft)](assets/distillation_impact.png)
+<p align="center">
+  <img src="assets/distillation_impact.png" alt="Draft-token acceptance rate before (independently-trained draft) and after (distilled draft)">
+</p>
 
 The first version of this project trained the draft and main models independently on the same tiny corpus. Draft acceptance rate: **3 to 7%**, so low that speculative decoding did *more* main-model work than plain decoding, because almost every block got rejected immediately and paid for a draft pass, a verify pass, and a resync pass without ever amortizing them. Direct measurement (teacher-forced, on the training text itself) showed why: two independently-trained tiny models, each close to memorizing an 11KB corpus, agree on barely half of their top-1 predictions even on that training text, and far less once free-running generation drifts off the exact memorized path.
 
