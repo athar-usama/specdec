@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="300" viewBox="0 0 800 300" font-family="Consolas, Menlo, monospace">
+<rect width="800" height="300" fill="#12141a"/>
+<text x="20" y="24" font-size="14" fill="#c9ced9">One set of ops, two call paths, no `if isinstance` branching</text>
+<defs><marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/></marker></defs>
+<path d="M230.0,68.0 C265.0,68.0 265.0,123.0 300.0,123.0" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow2)"/>
+<path d="M230.0,218.0 C265.0,218.0 265.0,163.0 300.0,163.0" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow2)"/>
+<path d="M500.0,123.0 C535.0,123.0 535.0,68.0 570.0,68.0" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow2)"/>
+<path d="M500.0,163.0 C535.0,163.0 535.0,218.0 570.0,218.0" fill="none" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrow2)"/>
+<rect x="30" y="40" width="200" height="56" rx="8" fill="#1a1d27" stroke="#0d47a1" stroke-width="1.8"/>
+<text x="130.0" y="64.0" font-size="13" fill="#c9ced9" text-anchor="middle">Tensor</text>
+<text x="130.0" y="84.0" font-size="10" fill="#6b7280" text-anchor="middle">training: builds an autodiff graph</text>
+<rect x="30" y="190" width="200" height="56" rx="8" fill="#1a1d27" stroke="#1b5e20" stroke-width="1.8"/>
+<text x="130.0" y="214.0" font-size="13" fill="#c9ced9" text-anchor="middle">np.ndarray</text>
+<text x="130.0" y="234.0" font-size="10" fill="#6b7280" text-anchor="middle">KV-cached inference: no graph</text>
+<rect x="300" y="115" width="200" height="56" rx="8" fill="#1a1d27" stroke="#b45309" stroke-width="1.8"/>
+<text x="400.0" y="139.0" font-size="13" fill="#c9ced9" text-anchor="middle">functional.py ops</text>
+<text x="400.0" y="159.0" font-size="10" fill="#6b7280" text-anchor="middle">softmax / layer_norm / gelu, generic-dispatched</text>
+<rect x="570" y="40" width="200" height="56" rx="8" fill="#1a1d27" stroke="#0d47a1" stroke-width="1.8"/>
+<text x="670.0" y="73.0" font-size="13" fill="#c9ced9" text-anchor="middle">GPT.forward (training)</text>
+<rect x="570" y="190" width="200" height="56" rx="8" fill="#1a1d27" stroke="#1b5e20" stroke-width="1.8"/>
+<text x="670.0" y="223.0" font-size="13" fill="#c9ced9" text-anchor="middle">generate.forward_step</text>
+</svg>

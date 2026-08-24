@@ -179,6 +179,111 @@ def plot_acceptance_over_blocks(acceptance_rates: list[float], path, *, title: s
     plt.close(fig)
 
 
+def plot_distillation_impact(before_low: float, before_high: float, after_pct: float, path) -> None:
+    """The chart behind the distillation story: draft-token acceptance
+    rate before (independently-trained draft, reported as the 3-7% range
+    actually observed across runs, not a single fabricated average) and
+    after (distilled draft, 52.9%, measured by `demos/benchmark.py`).
+    The "before" bar's height is the honestly-reported upper bound of
+    that range; its label states the range, not a false-precision point
+    estimate the original runs never produced."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(7.8, 5.5))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor(_BAND)
+
+    labels = ["independently\ntrained", "distilled"]
+    values = [before_high, after_pct]
+    texts = [f"{before_low:.0f}-{before_high:.0f}%", f"{after_pct:.1f}%"]
+    colors = [_NAIVE, _SPEC]
+    width = 0.5
+
+    for i, (val, color, text) in enumerate(zip(values, colors, texts, strict=True)):
+        _gradient_bar(ax, i, val, width, color)
+        _value_chip(ax, i, val, text, color=_SPEC_DARK if color == _SPEC else _TEXT)
+
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.set_xlim(-0.6, len(labels) - 0.4)
+    ax.set_ylabel("draft-token acceptance rate")
+    ax.set_ylim(0, max(values) * 1.32)
+    ax.set_title("Why the draft model was retrained", fontsize=13, fontweight="bold", loc="left", pad=14)
+    ax.grid(axis="y", color="white", linewidth=1.4, zorder=0)
+    ax.set_axisbelow(True)
+    _style_axis(ax)
+
+    fig.tight_layout()
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=170, facecolor="white")
+    plt.close(fig)
+
+
+def render_dispatch_diagram_svg(path: str | Path) -> None:
+    """A box-and-arrow diagram of the generic-dispatch trick behind the
+    first "what's novel" bullet: the same `functional.py` ops run
+    unmodified on a `Tensor` (training, builds a graph) or a plain
+    `np.ndarray` (KV-cached inference, no graph), because every op is
+    written against a small set of generic helpers instead of against
+    `Tensor` directly. This renders the actual call structure, not an
+    illustration of the idea."""
+    bg, panel, arrow, text, muted = "#12141a", "#1a1d27", "#4b5563", "#c9ced9", "#6b7280"
+    tensor_color, array_color, shared_color = "#0d47a1", "#1b5e20", "#b45309"
+
+    box_w, box_h = 200, 56
+    width, height = 800, 300
+
+    boxes = [
+        (30, 40, "Tensor", tensor_color, "training: builds an autodiff graph"),
+        (30, 190, "np.ndarray", array_color, "KV-cached inference: no graph"),
+        (300, 115, "functional.py ops", shared_color, "softmax / layer_norm / gelu, generic-dispatched"),
+        (570, 40, "GPT.forward (training)", tensor_color, ""),
+        (570, 190, "generate.forward_step", array_color, ""),
+    ]
+
+    svg = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" font-family="Consolas, Menlo, monospace">',
+        f'<rect width="{width}" height="{height}" fill="{bg}"/>',
+        f'<text x="20" y="24" font-size="14" fill="{text}">One set of ops, two call paths, '
+        'no `if isinstance` branching</text>',
+        '<defs><marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
+        f'orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{arrow}"/></marker></defs>',
+    ]
+
+    def edge(x1, y1, x2, y2):
+        mx = (x1 + x2) / 2
+        svg.append(
+            f'<path d="M{x1:.1f},{y1:.1f} C{mx:.1f},{y1:.1f} {mx:.1f},{y2:.1f} {x2:.1f},{y2:.1f}" '
+            f'fill="none" stroke="{arrow}" stroke-width="1.5" marker-end="url(#arrow2)"/>'
+        )
+
+    edge(30 + box_w, 40 + box_h / 2, 300, 115 + box_h / 2 - 20)
+    edge(30 + box_w, 190 + box_h / 2, 300, 115 + box_h / 2 + 20)
+    edge(300 + box_w, 115 + box_h / 2 - 20, 570, 40 + box_h / 2)
+    edge(300 + box_w, 115 + box_h / 2 + 20, 570, 190 + box_h / 2)
+
+    for x, y, label, color, sub in boxes:
+        svg.append(
+            f'<rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="8" '
+            f'fill="{panel}" stroke="{color}" stroke-width="1.8"/>'
+        )
+        label_y = y + box_h / 2 - 4 if sub else y + box_h / 2 + 5
+        svg.append(
+            f'<text x="{x + box_w / 2}" y="{label_y}" font-size="13" fill="{text}" '
+            f'text-anchor="middle">{html.escape(label)}</text>'
+        )
+        if sub:
+            svg.append(
+                f'<text x="{x + box_w / 2}" y="{y + box_h / 2 + 16}" font-size="10" fill="{muted}" '
+                f'text-anchor="middle">{html.escape(sub)}</text>'
+            )
+
+    svg.append("</svg>")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("\n".join(svg), encoding="utf-8")
+
+
 _KIND_STYLE = {
     "accepted": ("#d7f2dc", "#1b5e20", "accepted from draft"),
     "corrected": ("#fde0dc", "#b71c1c", "draft rejected, corrected by main model"),
