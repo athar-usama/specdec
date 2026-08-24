@@ -230,15 +230,17 @@ def render_dispatch_diagram_svg(path: str | Path) -> None:
     bg, panel, arrow, text, muted = "#12141a", "#1a1d27", "#4b5563", "#c9ced9", "#6b7280"
     tensor_color, array_color, shared_color = "#0d47a1", "#1b5e20", "#b45309"
 
-    box_w, box_h = 200, 56
-    width, height = 800, 300
+    side_w, mid_w, box_h = 200, 300, 56
+    col1_x, col2_x = 30, 300
+    col3_x = col2_x + mid_w + 70
+    width, height = col3_x + side_w + 30, 300
 
     boxes = [
-        (30, 40, "Tensor", tensor_color, "training: builds an autodiff graph"),
-        (30, 190, "np.ndarray", array_color, "KV-cached inference: no graph"),
-        (300, 115, "functional.py ops", shared_color, "softmax / layer_norm / gelu, generic-dispatched"),
-        (570, 40, "GPT.forward (training)", tensor_color, ""),
-        (570, 190, "generate.forward_step", array_color, ""),
+        (col1_x, 40, side_w, "Tensor", tensor_color, "training: builds an autodiff graph"),
+        (col1_x, 190, side_w, "np.ndarray", array_color, "KV-cached inference: no graph"),
+        (col2_x, 115, mid_w, "functional.py ops", shared_color, "softmax / layer_norm / gelu, generic-dispatched"),
+        (col3_x, 40, side_w, "GPT.forward (training)", tensor_color, ""),
+        (col3_x, 190, side_w, "generate.forward_step", array_color, ""),
     ]
 
     svg = [
@@ -258,12 +260,12 @@ def render_dispatch_diagram_svg(path: str | Path) -> None:
             f'fill="none" stroke="{arrow}" stroke-width="1.5" marker-end="url(#arrow2)"/>'
         )
 
-    edge(30 + box_w, 40 + box_h / 2, 300, 115 + box_h / 2 - 20)
-    edge(30 + box_w, 190 + box_h / 2, 300, 115 + box_h / 2 + 20)
-    edge(300 + box_w, 115 + box_h / 2 - 20, 570, 40 + box_h / 2)
-    edge(300 + box_w, 115 + box_h / 2 + 20, 570, 190 + box_h / 2)
+    edge(col1_x + side_w, 40 + box_h / 2, col2_x, 115 + box_h / 2 - 20)
+    edge(col1_x + side_w, 190 + box_h / 2, col2_x, 115 + box_h / 2 + 20)
+    edge(col2_x + mid_w, 115 + box_h / 2 - 20, col3_x, 40 + box_h / 2)
+    edge(col2_x + mid_w, 115 + box_h / 2 + 20, col3_x, 190 + box_h / 2)
 
-    for x, y, label, color, sub in boxes:
+    for x, y, box_w, label, color, sub in boxes:
         svg.append(
             f'<rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="8" '
             f'fill="{panel}" stroke="{color}" stroke-width="1.8"/>'
